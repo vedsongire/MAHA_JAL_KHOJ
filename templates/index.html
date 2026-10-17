@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MAHA JAL KHOJ — Advanced Groundwater Intelligence & Alert System</title>
+    
+    <!-- Google Fonts & Icons -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- Leaflet.js CSS & JS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
+
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body class="dark-mode">
+
+    <!-- Top Navigation Bar -->
+    <header class="app-header">
+        <div class="logo-group">
+            <div class="radar-pulse"></div>
+            <i class="fa-solid fa-water header-icon"></i>
+            <div>
+                <h1 class="logo-title">MAHA JAL KHOJ <span class="badge-live">LIVE TELEMETRY</span></h1>
+                <p class="logo-subtitle">National Groundwater Surveillance & Machine Learning Early-Warning System</p>
+            </div>
+        </div>
+
+        <!-- Quick Statewide Status Bar -->
+        <div class="header-metrics">
+            <div class="metric-chip">
+                <span class="chip-label">Monitored Stations</span>
+                <span class="chip-val" id="metric-stations">1,016</span>
+            </div>
+            <div class="metric-chip">
+                <span class="chip-label">Avg Water Depth</span>
+                <span class="chip-val" id="metric-depth">-- mbgl</span>
+            </div>
+            <div class="metric-chip drought-chip">
+                <span class="chip-label"><i class="fa-solid fa-triangle-exclamation"></i> Drought Alerts</span>
+                <span class="chip-val" id="metric-drought">--</span>
+            </div>
+            <div class="metric-chip flood-chip">
+                <span class="chip-label"><i class="fa-solid fa-water-ladder"></i> Flood Alerts</span>
+                <span class="chip-val" id="metric-flood">--</span>
+            </div>
+            <div class="metric-chip ml-chip">
+                <span class="chip-label"><i class="fa-solid fa-brain"></i> XGBoost Model</span>
+                <span class="chip-val" id="metric-ml">96.8% Acc</span>
+            </div>
+        </div>
+
+        <div class="header-actions">
+            <!-- Mode Switcher: Current (October 2026) vs May 2026 -->
+            <div class="mode-toggle-group" style="display: flex; background: rgba(30, 41, 59, 0.7); padding: 3px; border-radius: 8px; border: 1px solid var(--border-color); margin-right: 8px;">
+                <button id="btn-mode-current" class="btn btn-sm btn-primary" onclick="setTimelineMode('current')" title="Current Real-Time Post-Monsoon Status">
+                    <i class="fa-solid fa-satellite-dish"></i> Current (Oct 2026)
+                </button>
+                <button id="btn-mode-historical" class="btn btn-sm btn-secondary" onclick="setTimelineMode('historical')" title="Pre-Monsoon Summer Peak Snapshot">
+                    <i class="fa-solid fa-history"></i> May 2026
+                </button>
+            </div>
+            <button id="btn-india-view" class="btn btn-secondary"><i class="fa-solid fa-earth-asia"></i> India View</button>
+            <button id="btn-mh-view" class="btn btn-primary"><i class="fa-solid fa-location-crosshairs"></i> Focus Maharashtra</button>
+        </div>
+    </header>
+
+    <!-- Main Map Workspace Container -->
+    <div class="map-viewport">
+        <!-- Interactive Full Map -->
+        <div id="india-map"></div>
+
+        <!-- Filter Bar Floating Left -->
+        <div class="filter-panel glass-hud">
+            <div class="panel-header">
+                <h3><i class="fa-solid fa-sliders"></i> Surveillance Filter</h3>
+                <span class="badge" id="visible-station-count">1016 Active</span>
+            </div>
+            <div class="filter-row">
+                <label>Select District</label>
+                <select id="district-select" class="hud-select">
+                    <option value="All">All Maharashtra Districts (34)</option>
+                </select>
+            </div>
+            <div class="filter-row">
+                <label>Status Filter</label>
+                <div class="checkbox-group">
+                    <label class="cb-label drought-lbl"><input type="checkbox" value="Severe Drought Alert" checked> 🔴 Severe Drought (&gt;15m)</label>
+                    <label class="cb-label mod-drought-lbl"><input type="checkbox" value="Moderate Drought Alert" checked> 🟠 Moderate Drought (10-15m)</label>
+                    <label class="cb-label normal-lbl"><input type="checkbox" value="Normal Range" checked> 🟢 Normal (5-10m)</label>
+                    <label class="cb-label safe-lbl"><input type="checkbox" value="Safe / High Water Table" checked> 🔷 Safe / High (2-5m)</label>
+                    <label class="cb-label flood-lbl"><input type="checkbox" value="Flood / Waterlogging Risk" checked> 🌊 Flood Risk (&le;2m)</label>
+                </div>
+            </div>
+            <div class="map-legend">
+                <div class="legend-item"><span class="dot red-pulse"></span> Severe Drought (&gt;15m)</div>
+                <div class="legend-item"><span class="dot orange"></span> Moderate (10-15m)</div>
+                <div class="legend-item"><span class="dot green"></span> Normal (5-10m)</div>
+                <div class="legend-item"><span class="dot cyan"></span> Safe (2-5m)</div>
+                <div class="legend-item"><span class="dot blue-pulse"></span> Flood / Waterlogging (&le;2m)</div>
+            </div>
+        </div>
+
+        <!-- TOP RIGHT CRITICAL ALERTS HUD (User Explicit Request!) -->
+        <div class="critical-alerts-hud glass-hud" id="critical-alerts-hud">
+            <div class="hud-header">
+                <div class="hud-title-wrap">
+                    <span class="radar-dot"></span>
+                    <h3>CRITICAL ALERTS FEED</h3>
+                </div>
+                <span class="live-tag">REAL-TIME</span>
+            </div>
+
+            <!-- Tab switcher: Drought vs Flood -->
+            <div class="alert-tab-bar">
+                <button class="alert-tab active" id="tab-drought" onclick="switchAlertTab('drought')">
+                    <i class="fa-solid fa-fire-flame-curved"></i> Severe Drought (<span id="drought-count">0</span>)
+                </button>
+                <button class="alert-tab" id="tab-flood" onclick="switchAlertTab('flood')">
+                    <i class="fa-solid fa-cloud-showers-water"></i> Flood / Saturated (<span id="flood-count">0</span>)
+                </button>
+            </div>
+
+            <!-- Scrollable Alert Items Container -->
+            <div class="alert-list-container" id="alert-list">
+                <div class="loading-spinner"><i class="fa-solid fa-circle-notch fa-spin"></i> Loading telemetry alerts...</div>
+            </div>
+
+            <div class="hud-footer">
+                <span><i class="fa-solid fa-info-circle"></i> Click station to focus camera & open hydrograph</span>
+            </div>
+        </div>
+
+        <!-- Station Hydrograph & ML Prediction Drawer (Slides from bottom or right when station clicked) -->
+        <div class="station-drawer glass-hud" id="station-drawer">
+            <button class="close-drawer-btn" onclick="closeDrawer()"><i class="fa-solid fa-xmark"></i></button>
+            <div class="drawer-header">
+                <div>
+                    <h2 id="drawer-station-name">Station Name</h2>
+                    <p id="drawer-station-meta">District • Tehsil • Lat/Lng</p>
+                </div>
+                <div class="drawer-status-badge" id="drawer-status-badge">Normal</div>
+            </div>
+
+            <div class="drawer-metrics-grid">
+                <div class="drawer-card">
+                    <span class="d-label">Current Water Depth</span>
+                    <span class="d-val" id="drawer-depth">-- mbgl</span>
+                </div>
+                <div class="drawer-card">
+                    <span class="d-label">Surface Elevation</span>
+                    <span class="d-val" id="drawer-rl">-- m MSL</span>
+                </div>
+                <div class="drawer-card">
+                    <span class="d-label">Observed Range</span>
+                    <span class="d-val" id="drawer-range">-- to -- m</span>
+                </div>
+                <div class="drawer-card">
+                    <span class="d-label">Latest Acquisition</span>
+                    <span class="d-val" id="drawer-time">--</span>
+                </div>
+            </div>
+
+            <!-- Chart Container -->
+            <div class="chart-container-box">
+                <div class="chart-header">
+                    <div style="display: flex; gap: 8px;">
+                        <button class="btn btn-sm btn-secondary active-mode" id="btn-chart-past" onclick="switchChartMode('past')">
+                            <i class="fa-solid fa-chart-line"></i> Recorded (Jan-May 2026)
+                        </button>
+                        <button class="btn btn-sm btn-primary" id="btn-chart-future" onclick="switchChartMode('future')">
+                            <i class="fa-solid fa-wand-magic-sparkles"></i> 🔮 10-Month AI Forecast (June 2026 - March 2027)
+                        </button>
+                    </div>
+                    <span class="chart-sub" id="chart-sub-label">Water Table Depth Below Ground Level</span>
+                </div>
+                <div style="height: 220px; width: 100%;">
+                    <canvas id="stationChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Machine Learning Prediction Box -->
+            <div class="ml-prediction-box">
+                <div class="ml-box-header">
+                    <h4><i class="fa-solid fa-robot"></i> XGBoost 7-Day Forward Prediction</h4>
+                    <button class="btn btn-sm btn-primary" id="btn-run-ml" onclick="runMLPrediction()">
+                        <i class="fa-solid fa-bolt"></i> Run Forecast
+                    </button>
+                </div>
+                <div class="ml-result-grid" id="ml-result-grid" style="display: none;">
+                    <div class="ml-res-item">
+                        <span class="ml-sub">Forecasted Depth</span>
+                        <h3 id="ml-pred-depth">-- mbgl</h3>
+                    </div>
+                    <div class="ml-res-item">
+                        <span class="ml-sub">Predicted Alert Level</span>
+                        <h3 id="ml-pred-alert">--</h3>
+                    </div>
+                    <div class="ml-res-item">
+                        <span class="ml-sub">Model Confidence</span>
+                        <h3 id="ml-confidence">--%</h3>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Custom App Logic -->
+    <script src="/static/app.js?v=4"></script>
+</body>
+</html>
