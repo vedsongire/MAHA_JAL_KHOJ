@@ -32,49 +32,19 @@ The system features a multi-tiered pipeline specifically engineered for noisy hy
 
 ![MAHA JAL KHOJ ML Model Architecture](notebook/ml_model_architecture.png)
 
-### Architectural Tiers Breakdown
+### Architectural Stages Flow
 
 ```
-┌───────────────────────────────────────────────────────────────────────────────────────────────────┐
-│                     MAHA JAL KHOJ : DUAL-HEAD MACHINE LEARNING ARCHITECTURE                       │
-│      End-to-End Spatially-Weighted Pipeline for Groundwater Level Forecasting & Alert Detection   │
-└───────────────────────────────────────────────────────────────────────────────────────────────────┘
-          │                                 │                                 │
-┌─────────────────────────┐     ┌─────────────────────────┐     ┌─────────────────────────┐
-│ 1. RAW TELEMETRY INPUTS │────►│ 2. DATA CLEANING & QA   │────►│ 3. FEATURE ENGINEERING  │
-│ • 218,791 observations  │     │ • 9,222 probe errors (1m│     │ • 12 Engineered Inputs  │
-│ • 1,016 DWLR Stations   │     │ • Outlier clipping 0-60m│     │ • Cyclical Sin/Cos Day  │
-│ • 34 Districts, 6-hrly  │     │ • Standardize Depth_mbgl│     │ • Lag-1, Lag-4, Roll-7d │
-└─────────────────────────┘     └─────────────────────────┘     └───────────┬─────────────┘
-                                                                            │
-                                                                 Feature Vector X
-                                                                            │
-                                                                            ▼
-┌───────────────────────────────────────────────────────────────────────────────────────────────────┐
-│                      4. INVERSE SPATIAL DENSITY BALANCING LAYER (W_i = 1 / N_dist)                │
-│    Weights: Sangli (92 stns) W = 0.397  ◄────────────────────────►  Dhule (4 stns) W = 8.942      │
-│    Directly injected into XGBoost gradient loss function to prevent spatial sampling bias         │
-└───────────────────────────────────┬───────────────────────────────────┬───────────────────────────┘
-                                    │                                   │
-                    Weighted Train Set (X, W)           Weighted Train Set (X, W)
-                                    ▼                                   ▼
-          ┌───────────────────────────────────┐       ┌───────────────────────────────────┐
-          │  5A. CONTINUOUS DEPTH REGRESSOR   │       │  5B. MULTI-CLASS ALERT CLASSIFIER │
-          │  Model: XGBRegressor (150 trees)  │       │  Model: XGBClassifier (150 trees) │
-          │  • MAE: 0.364 meters              │       │  • Accuracy: 96.71%               │
-          │  • RMSE: 0.612 meters             │       │  • Weighted F1: 0.9671            │
-          │  • R² Score: 0.9920               │       │  • Sparse Districts: 87.1% - 99.3%│
-          └─────────────────┬─────────────────┘       └─────────────────┬─────────────────┘
-                            │                                           │
-                       Depth (mbgl)                             Class & Probabilities
-                            └───────────────────┬───────────────────────┘
-                                                ▼
-┌───────────────────────────────────────────────────────────────────────────────────────────────────┐
-│                   6. INFERENCE, RECURSIVE 10-MONTH PROJECTIONS & SERVING LAYER                    │
-│ • Exact Predicted Depth (e.g. 13.14 mbgl) & 5-tier CGWB Alert Classification (Flood to Drought)  │
-│ • 43-Week Forward Projections simulating Monsoon Recharge (Jun-Sep) & Summer Depletion (Oct-Mar)  │
-│ • Served live via FastAPI REST Endpoints into GIS Command Center                                  │
-└───────────────────────────────────────────────────────────────────────────────────────────────────┘
+┌────────────────────────┐      ┌────────────────────────┐      ┌────────────────────────┐      ┌────────────────────────┐
+│  STAGE 1: INGESTION    │      │  STAGE 2: FEATURES     │      │   STAGE 3: DUAL-HEAD   │      │   STAGE 4: SERVING     │
+├────────────────────────┤      ├────────────────────────┤      ├────────────────────────┤      ├────────────────────────┤
+│ • 1,016 DWLR Stations  │─────►│ • 12 Multi-Modal Feats │─────►│ [HEAD A: XGBRegressor] │─────►│ • 10-Month Forecaster  │
+│ • 218k 6-Hourly Logs   │Clean │   (Lat/Lon, Sin/Cos,   │Feats │ • MAE: 0.36m, R²: 0.992│Depth │   (43-Week Projections)│
+│ • 9,222 Errors (1.000m)│Stream│    Lags, Rolling 7d)   │  +   ├────────────────────────┤  &   │ • FastAPI REST Server  │
+│ • Physical Clip (0-60m)│      │ • Inverse Spatial Layer│Weight│ [HEAD B: XGBClassifier]│Alert │   (Sub-10ms Latency)   │
+│ • Normalized Depth_mbgl│      │   W_i = 1 / N_stations │      │ • Acc: 96.7%, F1: 0.967│ Prob │ • Leaflet Dark GIS UI  │
+│ [204,450 Clean Records]│      │ [Bias Mitigated 0.4-8x]│      │ [5-Tier CGWB Risk Cls] │      │ [Pinned Alerts Ticker] │
+└────────────────────────┘      └────────────────────────┘      └────────────────────────┘      └────────────────────────┘
 ```
 
 ### 1. Telemetry Ingestion & Anomaly Filtration

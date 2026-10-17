@@ -5,238 +5,294 @@ import matplotlib.patches as patches
 os.makedirs("notebook", exist_ok=True)
 output_path = "notebook/ml_model_architecture.png"
 
-# Setup high-resolution figure with modern dark aesthetic
-fig, ax = plt.subplots(figsize=(20, 13), dpi=300)
-fig.patch.set_facecolor('#0b0f19')
-ax.set_facecolor('#0b0f19')
+# Setup high-resolution figure with modern, clean dark aesthetic
+fig, ax = plt.subplots(figsize=(24, 13), dpi=300)
+fig.patch.set_facecolor('#090d16')
+ax.set_facecolor('#090d16')
 
-# Remove axes
+# Coordinate system: 0 to 100 on X, 0 to 55 on Y
 ax.set_xlim(0, 100)
-ax.set_ylim(0, 100)
+ax.set_ylim(0, 55)
 ax.axis('off')
 
 # Color Palette
-C_HEADER = '#06b6d4'      # Cyan
-C_BG_CARD = '#131b2e'     # Dark navy card background
-C_BORDER_INPUT = '#3b82f6' # Blue
-C_BORDER_PREP = '#6366f1'  # Indigo
-C_BORDER_FEAT = '#8b5cf6'  # Purple
-C_BORDER_WEIGHT = '#ec4899'# Pink
-C_BORDER_MODEL = '#10b981' # Emerald Green
-C_BORDER_OUT = '#f59e0b'   # Amber
-C_BORDER_SEASON = '#06b6d4'# Cyan
-C_TEXT_MAIN = '#ffffff'
+C_TITLE = '#38bdf8'       # Sky Blue
+C_SUBTITLE = '#94a3b8'    # Slate Gray
+C_BG_CARD = '#111827'     # Deep Navy Card
+C_BORDER_S1 = '#0ea5e9'   # Ocean Blue (Stage 1)
+C_BORDER_S2 = '#818cf8'   # Indigo (Stage 2)
+C_BORDER_REG = '#10b981'  # Emerald (Regressor)
+C_BORDER_CLS = '#f59e0b'  # Amber (Classifier)
+C_BORDER_S4 = '#f43f5e'   # Rose / Coral (Serving)
+C_TEXT_WHITE = '#ffffff'
+C_TEXT_LIGHT = '#e2e8f0'
 C_TEXT_MUTED = '#94a3b8'
-C_TEXT_SUB = '#cbd5e1'
 
-def draw_card(ax, x, y, w, h, title, subtitle, items, border_color, badge=None):
-    # Shadow
+def draw_card(ax, x, y, w, h, title, subtitle, sections, border_color, stage_badge=None, metric_chips=None):
+    # Card Background with Subtle Shadow
     shadow = patches.FancyBboxPatch(
-        (x + 0.4, y - 0.4), w, h,
-        boxstyle="round,pad=0.5,rounding_size=1.2",
-        facecolor='#05070d', edgecolor='none', alpha=0.6, zorder=2
+        (x + 0.3, y - 0.3), w, h,
+        boxstyle="round,pad=0.4,rounding_size=1.0",
+        facecolor='#030712', edgecolor='none', alpha=0.7, zorder=2
     )
     ax.add_patch(shadow)
 
-    # Main Card
     card = patches.FancyBboxPatch(
         (x, y), w, h,
-        boxstyle="round,pad=0.5,rounding_size=1.2",
-        facecolor=C_BG_CARD, edgecolor=border_color, linewidth=2, zorder=3
+        boxstyle="round,pad=0.4,rounding_size=1.0",
+        facecolor=C_BG_CARD, edgecolor=border_color, linewidth=2.0, zorder=3
     )
     ax.add_patch(card)
 
-    # Header Bar Accent
-    accent_bar = patches.FancyBboxPatch(
-        (x + 0.2, y + h - 1.8), w - 0.4, 1.6,
-        boxstyle="round,pad=0.2,rounding_size=0.6",
-        facecolor=border_color, edgecolor='none', alpha=0.2, zorder=4
+    # Top Header Accent Ribbon
+    accent = patches.FancyBboxPatch(
+        (x + 0.2, y + h - 2.0), w - 0.4, 1.8,
+        boxstyle="round,pad=0.15,rounding_size=0.5",
+        facecolor=border_color, edgecolor='none', alpha=0.18, zorder=4
     )
-    ax.add_patch(accent_bar)
+    ax.add_patch(accent)
+
+    # Stage Badge (if any)
+    if stage_badge:
+        ax.text(
+            x + 1.2, y + h - 1.1, stage_badge,
+            color='#ffffff', fontsize=8.5, fontweight='bold',
+            bbox=dict(boxstyle='round,pad=0.25', facecolor=border_color, edgecolor='none'),
+            zorder=6, va='center'
+        )
+        title_x = x + 1.2 + (len(stage_badge) * 0.45) + 1.1
+    else:
+        title_x = x + 1.2
 
     # Title
-    ax.text(x + 1.2, y + h - 1.0, title, color=C_TEXT_MAIN, fontsize=12, fontweight='bold', zorder=5)
-
-    if badge:
-        ax.text(x + w - 1.2, y + h - 1.0, badge, color=border_color, fontsize=9, fontweight='bold',
-                ha='right', zorder=5, bbox=dict(boxstyle='round,pad=0.2', facecolor='#0b0f19', edgecolor=border_color, lw=1))
+    ax.text(title_x, y + h - 1.1, title, color=C_TEXT_WHITE, fontsize=12.5, fontweight='bold', zorder=6, va='center')
 
     # Subtitle
     if subtitle:
-        ax.text(x + 1.2, y + h - 3.0, subtitle, color=C_TEXT_MUTED, fontsize=9.5, style='italic', zorder=5)
+        ax.text(x + 1.2, y + h - 3.2, subtitle, color=border_color, fontsize=9.5, fontweight='bold', zorder=6)
 
-    # Bullet items
-    curr_y = y + h - 4.8
-    for item in items:
-        ax.text(x + 1.5, curr_y, item, color=C_TEXT_SUB, fontsize=9, zorder=5)
-        curr_y -= 1.8
+    # Sectional text rendering (heading + bullet items)
+    curr_y = y + h - 5.0
+    for sec_header, sec_items in sections:
+        if sec_header:
+            ax.text(x + 1.2, curr_y, sec_header, color=border_color, fontsize=9.5, fontweight='bold', zorder=6)
+            curr_y -= 1.65
+        for item in sec_items:
+            ax.text(x + 1.4, curr_y, item, color=C_TEXT_LIGHT, fontsize=9.0, zorder=6)
+            curr_y -= 1.50
+        curr_y -= 0.6  # Gap between sections
+
+    # Bottom Metric / Tech Chips
+    if metric_chips:
+        chip_x = x + 1.2
+        chip_y = y + 1.6
+        for chip_text, chip_color, chip_bg in metric_chips:
+            chip_box = dict(boxstyle='round,pad=0.3', facecolor=chip_bg, edgecolor=chip_color, lw=1.2)
+            ax.text(chip_x, chip_y, chip_text, color=chip_color, fontsize=8.5, fontweight='bold', bbox=chip_box, zorder=7)
+            chip_x += len(chip_text) * 0.44 + 1.4
 
 def draw_arrow(ax, start, end, label=None, color='#64748b'):
     ax.annotate(
         '', xy=end, xytext=start,
-        arrowprops=dict(facecolor=color, edgecolor=color, width=2.5, headwidth=9, headlength=10, shrink=0.05),
-        zorder=6
+        arrowprops=dict(facecolor=color, edgecolor=color, width=2.2, headwidth=8.5, headlength=9, shrink=0.03),
+        zorder=8
     )
     if label:
         mid_x = (start[0] + end[0]) / 2
-        mid_y = (start[1] + end[1]) / 2 + 1.2
-        ax.text(mid_x, mid_y, label, color='#38bdf8', fontsize=8.5, fontweight='bold', ha='center',
-                bbox=dict(boxstyle='round,pad=0.2', facecolor='#0b0f19', edgecolor='none', alpha=0.9), zorder=7)
+        mid_y = (start[1] + end[1]) / 2 + 0.9
+        ax.text(
+            mid_x, mid_y, label,
+            color=color, fontsize=8.2, fontweight='bold', ha='center',
+            bbox=dict(boxstyle='round,pad=0.25', facecolor='#090d16', edgecolor=color, alpha=0.95, lw=0.8),
+            zorder=9
+        )
 
-# --- 1. TITLE & BANNER ---
-ax.text(50, 96.5, "MAHA JAL KHOJ : DUAL-HEAD MACHINE LEARNING ARCHITECTURE",
-        color='#38bdf8', fontsize=20, fontweight='heavy', ha='center')
-ax.text(50, 94.0, "End-to-End Spatially-Weighted Machine Learning Pipeline for Groundwater Level Forecasting & Alert Detection",
-        color=C_TEXT_MUTED, fontsize=11, ha='center')
+# ==============================================================================
+# 1. HEADER BANNER
+# ==============================================================================
+ax.text(50, 52.8, "MAHA JAL KHOJ : SPATIALLY-WEIGHTED DUAL-HEAD ML ARCHITECTURE",
+        color='#38bdf8', fontsize=19, fontweight='bold', ha='center')
+ax.text(50, 50.8, "End-to-End Pipeline: Telemetry Ingestion -> Anomaly QA -> Spatial Balancing -> Dual-Head XGBoost -> Seasonal Forecaster",
+        color=C_SUBTITLE, fontsize=10.5, ha='center')
 
-# Horizontal divider line under title
-ax.plot([4, 96], [92.2, 92.2], color='#1e293b', lw=1.5)
+# Subtle divider line
+ax.plot([4, 96], [49.5, 49.5], color='#1e293b', lw=1.5, zorder=1)
 
-# --- 2. ROW 1: DATA INGESTION -> PREPROCESSING -> FEATURE ENGINEERING ---
-# Card 1: Raw Telemetry Stream
+# ==============================================================================
+# 2. STAGE 1: INGESTION & DATA CLEANING
+# ==============================================================================
 draw_card(
-    ax, x=4, y=69, w=26, h=21,
-    title="1. RAW TELEMETRY INPUTS",
+    ax, x=4, y=6.5, w=19.5, h=41,
+    title="Data Ingestion & QA",
     subtitle="IoT DWLR Hydrogeological Stream",
-    items=[
-        "• 218,791 observations across Maharashtra",
-        "• 1,016 Piezometer / Borewell Stations",
-        "• 34 Districts & 304 Sub-districts (Tehsils)",
-        "• 6-Hourly Interval (00:00, 06:00, 12:00, 18:00)",
-        "• Station Coordinates (Latitude, Longitude)",
-        "• Ground Elevation (RL_MSL in meters)",
-        "• Raw Sensor Level (Telemetry Meter)"
+    stage_badge="STAGE 1",
+    sections=[
+        ("Telemetry Network Scale:", [
+            "• 1,016 Monitoring Borewells",
+            "• 34 Districts & 304 Tehsils",
+            "• 218,791 Total Telemetry Records"
+        ]),
+        ("Sampling Resolution:", [
+            "• 6-Hourly Automated Intervals",
+            "• (00:00, 06:00, 12:00, 18:00)"
+        ]),
+        ("Hardware Error QA:", [
+            "• 9,222 dummy probe disconnect",
+            "  records (exact 1.000m) isolated"
+        ]),
+        ("Physical Range & Sign QA:", [
+            "• Outliers clipped (0m <= depth <= 60m)",
+            "• Sign-inverted to true Depth_mbgl"
+        ]),
+        ("Clean Retained Stream:", [
+            "• 204,450 Verified Clean Records"
+        ])
     ],
-    border_color=C_BORDER_INPUT,
-    badge="STREAM"
+    border_color=C_BORDER_S1,
+    metric_chips=[
+        ("1,016 DWLRs", '#38bdf8', '#0c233c'),
+        ("204k Clean Rows", '#38bdf8', '#0c233c')
+    ]
 )
 
-# Card 2: Cleaning & Anomaly Isolation
+# Arrow from Stage 1 to Stage 2
+draw_arrow(ax, (24.0, 27.0), (27.0, 27.0), "Clean Stream", color=C_BORDER_S1)
+
+# ==============================================================================
+# 3. STAGE 2: FEATURE STORE & SPATIAL DENSITY BALANCING
+# ==============================================================================
 draw_card(
-    ax, x=36, y=69, w=27, h=21,
-    title="2. DATA CLEANING & QA",
-    subtitle="Anomaly Filtering & Standardization",
-    items=[
-        "• Dummy Code Filter: 9,222 placeholder 1.000m",
-        "  disconnected probe logs eliminated",
-        "• Physical Outlier Clip: (0m <= Depth <= 60m)",
-        "  filters telemetry glitch spikes (< -60m)",
-        "• Sign Inversion & Normalization:",
-        "  Standardizes negative telemetry into positive",
-        "  Depth Below Ground Level (Depth_mbgl)",
-        "• 204,450 Verified Clean Records Retained"
+    ax, x=27.5, y=6.5, w=20.5, h=41,
+    title="Features & Spatial Layer",
+    subtitle="Sampling Bias Mitigation Engine",
+    stage_badge="STAGE 2",
+    sections=[
+        ("12 Multi-Modal Features:", [
+            "• Spatial: Latitude, Longitude",
+            "• Elevation: Surface RL_MSL (meters)",
+            "• Seasonality: Sin & Cos (DayOfYear)",
+            "• Diurnal: Month & Observation Hour",
+            "• Hydro Lags: Lag-1 (6h), Lag-4 (24h)",
+            "• Dynamics: 7d Rolling, 24h Decline"
+        ]),
+        ("Inverse Spatial Balancing Layer:", [
+            "• Problem: Dense Sangli has 92 stations",
+            "  while sparse Dhule has only 4 stations",
+            "• Weight: W_i = 1 / N_district_stations",
+            "• Normalized: Mean(W) = 1.0",
+            "• Gradient Scaling: 0.397 to 8.942",
+            "• Eliminates regional sampling bias"
+        ])
     ],
-    border_color=C_BORDER_PREP,
-    badge="ETL CLEAN"
+    border_color=C_BORDER_S2,
+    metric_chips=[
+        ("12 Features", '#818cf8', '#1e1b4b'),
+        ("Bias Mitigated", '#818cf8', '#1e1b4b')
+    ]
 )
 
-# Card 3: Feature Engineering Engine
+# Arrows from Stage 2 to Dual Heads (Split Top & Bottom)
+draw_arrow(ax, (48.5, 37.0), (52.5, 37.0), "Features + W", color=C_BORDER_REG)
+draw_arrow(ax, (48.5, 17.0), (52.5, 17.0), "Features + W", color=C_BORDER_CLS)
+
+# ==============================================================================
+# 4. STAGE 3: DUAL-HEAD MACHINE LEARNING CORE
+# ==============================================================================
+# 3A: Continuous Depth Regressor (Top)
 draw_card(
-    ax, x=69, y=69, w=27, h=21,
-    title="3. FEATURE ENGINEERING",
-    subtitle="12 Multi-Dimensional Input Features",
-    items=[
-        "• Spatial: Latitude, Longitude, RL_MSL",
-        "• Administrative: District Frequency Encoding",
-        "• Cyclical Seasonality: Sin & Cos (DayOfYear)",
-        "  encodes circular 365-day repeating cycle",
-        "• Diurnal & Seasonal: Month & Observation Hour",
-        "• Hydro Lag-1: Depth recorded 6 hours prior",
-        "• Hydro Lag-4: Depth recorded 24 hours prior",
-        "• Rolling 7-Day Trend: 28-observation mean",
-        "• Velocity: 24h Rate of Depletion (Lag1 - Lag4)"
+    ax, x=53, y=27.5, w=22.5, h=20,
+    title="XGBRegressor (Depth)",
+    subtitle="Continuous Aquifer Level Estimator",
+    stage_badge="HEAD A",
+    sections=[
+        ("Model Configuration:", [
+            "• Target: Exact Water Depth (mbgl)",
+            "• 150 Trees, max_depth = 6, lr = 0.08"
+        ]),
+        ("Validated Test Performance:", [
+            "• Mean Absolute Error (MAE): 0.364 m",
+            "• Root Mean Sq. Error (RMSE): 0.612 m",
+            "• Coeff. of Determination (R²): 0.9920",
+            "• Output: Exact predicted depth below surface"
+        ])
     ],
-    border_color=C_BORDER_FEAT,
-    badge="12 FEATURES"
+    border_color=C_BORDER_REG,
+    metric_chips=[
+        ("MAE: 0.36m", '#10b981', '#064e3b'),
+        ("R²: 0.9920", '#10b981', '#064e3b')
+    ]
 )
 
-# Arrows between Row 1
-draw_arrow(ax, (30.5, 79.5), (35.5, 79.5), "Clean Stream")
-draw_arrow(ax, (63.5, 79.5), (68.5, 79.5), "Transform")
-
-# Down arrow from Feature Engineering to Spatial Density Weighting
-draw_arrow(ax, (82.5, 69.0), (82.5, 59.5), "Feature Vector X")
-
-# --- 3. ROW 2: SPATIAL DENSITY WEIGHTING ---
+# 3B: Multi-Class Alert Classifier (Bottom)
 draw_card(
-    ax, x=18, y=43, w=64, h=16,
-    title="4. INVERSE SPATIAL DENSITY BALANCING LAYER (Weighting Formulation)",
-    subtitle="Eliminates Clustered Sampling Bias between Dense (Sangli: 92) and Sparse (Dhule: 4) Districts",
-    items=[
-        "• Problem Identified: Dense districts have up to 23x more telemetry points than sparse districts.",
-        "• Formulation: Weight W_i = 1 / (N_district_stations), normalized such that mean(W) = 1.0",
-        "• Sample Weight Scaling: W_min = 0.397 (Sangli clusters)  ◄───►  W_max = 8.942 (Dhule/Hingoli sparse)",
-        "• Loss Function Integration: Directly passed into XGBoost training via sample_weight=sample_weights",
-        "• Result: Sparse districts maintain 87% - 99% accuracy; Sangli/Nashik/Amravati clusters do not dominate gradients."
+    ax, x=53, y=6.5, w=22.5, h=20,
+    title="XGBClassifier (Alerts)",
+    subtitle="CGWB Multi-Class Risk Classifier",
+    stage_badge="HEAD B",
+    sections=[
+        ("Model Configuration:", [
+            "• Target: 5 CGWB Alert Categories",
+            "  (Flood <=2m, Safe 2-5m, Normal 5-10m,",
+            "   Mod Drought 10-15m, Severe Drought >15m)"
+        ]),
+        ("Validated Test Performance:", [
+            "• Overall Accuracy: 96.71% | Weighted F1: 0.967",
+            "• Sparse Districts Accuracy: 87.1% - 99.3%",
+            "• Output: Risk Tier + Softmax Probability"
+        ])
     ],
-    border_color=C_BORDER_WEIGHT,
-    badge="SPATIAL FAIRNESS"
+    border_color=C_BORDER_CLS,
+    metric_chips=[
+        ("Acc: 96.7%", '#fbbf24', '#451a03'),
+        ("F1: 0.967", '#fbbf24', '#451a03')
+    ]
 )
 
-# Connect Row 1 to Spatial Weighting, then split down into Dual-Head Models
-draw_arrow(ax, (50, 43), (35, 33), "Weighted Train Set (X, W)", color='#ec4899')
-draw_arrow(ax, (50, 43), (65, 33), "Weighted Train Set (X, W)", color='#ec4899')
+# Arrows from Dual Heads to Stage 4 (Merge)
+draw_arrow(ax, (76.0, 37.0), (79.5, 31.0), "Predicted Depth", color=C_BORDER_REG)
+draw_arrow(ax, (76.0, 17.0), (79.5, 23.0), "Risk Tier + Prob", color=C_BORDER_CLS)
 
-# --- 4. ROW 3: DUAL-HEAD CORE ENSEMBLE ENGINE ---
-# Model Head A: XGBRegressor
+# ==============================================================================
+# 5. STAGE 4: SERVING & RECURSIVE SEASONAL FORECASTER
+# ==============================================================================
 draw_card(
-    ax, x=4, y=14, w=42, h=19,
-    title="5A. CONTINUOUS DEPTH REGRESSOR",
-    subtitle="Model: XGBRegressor (150 Estimators, max_depth=6)",
-    items=[
-        "• Objective: reg:squarederror (Mean Squared Error)",
-        "• Training Target: Exact continuous Depth_mbgl (meters)",
-        "• Regularization: Learning Rate = 0.08, Subsample = 0.8",
-        "• Evaluation Metrics:",
-        "  - Mean Absolute Error (MAE): 0.364 meters",
-        "  - Root Mean Squared Error (RMSE): 0.612 meters",
-        "  - Coefficient of Determination (R²): 0.9920",
-        "• Output: Exact predicted depth below ground surface"
+    ax, x=80, y=6.5, w=16, h=41,
+    title="Serving & GIS UI",
+    subtitle="Operational Decision Support",
+    stage_badge="STAGE 4",
+    sections=[
+        ("10-Month Forecaster:", [
+            "• 43-week recursive engine",
+            "• Simulates monsoon recharge",
+            "  & summer drawdown",
+            "• Horizon: June 2026 - Mar 2027"
+        ]),
+        ("FastAPI REST Endpoints:", [
+            "• Sub-10ms response latency",
+            "• /api/summary",
+            "• /api/stations",
+            "• /api/critical-alerts",
+            "• /api/predict"
+        ]),
+        ("GIS Command Center:", [
+            "• Leaflet Dark Canvas GIS",
+            "• Dynamic Station Hydrographs",
+            "• Pinned Critical Alerts Ticker",
+            "• Oct 2026 Current State Toggle"
+        ])
     ],
-    border_color=C_BORDER_MODEL,
-    badge="REGRESSOR"
+    border_color=C_BORDER_S4,
+    metric_chips=[
+        ("FastAPI", '#f43f5e', '#4c0519'),
+        ("GIS Center", '#f43f5e', '#4c0519')
+    ]
 )
 
-# Model Head B: XGBClassifier
-draw_card(
-    ax, x=54, y=14, w=42, h=19,
-    title="5B. MULTI-CLASS ALERT CLASSIFIER",
-    subtitle="Model: XGBClassifier (150 Estimators x 5 Classes)",
-    items=[
-        "• Objective: multi:softprob (Multi-Class Cross-Entropy)",
-        "• Training Target: 5 CGWB Alert Risk Categories",
-        "• Class Probabilities: Softmax P(C_i) = e^(z_i) / Σ e^(z_k)",
-        "• Evaluation Metrics:",
-        "  - Overall Classification Accuracy: 96.71%",
-        "  - Weighted F1-Score: 0.9671 | Macro F1: 0.9592",
-        "  - Sparse District Accuracy: Dhule 87.1%, Washim 99.3%",
-        "• Output: Discrete Risk Level + Model Confidence %"
-    ],
-    border_color=C_BORDER_MODEL,
-    badge="CLASSIFIER"
-)
-
-# --- 5. BOTTOM ROW: OUTPUTS & RECURSIVE FORECASTING MODULE ---
-draw_card(
-    ax, x=4, y=1.5, w=92, h=10.5,
-    title="6. INFERENCE, RECURSIVE 10-MONTH PROJECTIONS & SERVING LAYER",
-    subtitle="Real-Time FastAPI Backend -> Interactive Command Center & Live Alerts",
-    items=[
-        "• Continuous Depth Output: Returns exact predicted depth (e.g. 13.14 mbgl) with sub-meter precision.",
-        "• Alert Categorization: [Flood Risk <= 2m] | [Safe 2-5m] | [Normal 5-10m] | [Mod Drought 10-15m] | [Severe Drought > 15m]",
-        "• Recursive 10-Month AI Forecaster: Advances week-by-week simulating Southwest Monsoon recharge & summer depletion through March 2027.",
-        "• Production Deployment: Served via FastAPI REST API (/api/summary, /api/critical-alerts, /api/stations, /api/predict)."
-    ],
-    border_color=C_BORDER_OUT,
-    badge="DECISION SUPPORT"
-)
-
-# Final arrows down to Output
-draw_arrow(ax, (25, 14), (25, 12), "Depth Float", color='#10b981')
-draw_arrow(ax, (75, 14), (75, 12), "Class & Prob", color='#10b981')
-
+# ==============================================================================
+# 6. SAVE HIGH-RESOLUTION FIGURE
+# ==============================================================================
 plt.tight_layout()
 plt.savefig(output_path, dpi=300, facecolor=fig.get_facecolor(), edgecolor='none', bbox_inches='tight')
 plt.close()
 
-print(f"High-resolution architecture diagram successfully generated at: {output_path}")
+print(f"Clean, modern architecture diagram successfully generated at: {output_path}")
