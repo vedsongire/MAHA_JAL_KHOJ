@@ -260,14 +260,11 @@ function flyToStation(lat, lng, stationName) {
 
 let currentStationHistory = [];
 let currentStationForecast = null;
-let currentChartMode = 'past';
 
-// --- STEP 6: STATION HYDROGRAPH DRAWER & CHART.JS ---
+// --- STEP 6: STATION HYDROGRAPH DRAWER & COMBINED CHART ---
 async function openStationDrawer(st) {
     currentSelectedStation = st;
-    currentChartMode = 'past';
     currentStationForecast = null;
-    updateChartToggleButtons();
 
     const drawer = document.getElementById('station-drawer');
     drawer.style.display = 'block';
@@ -287,45 +284,33 @@ async function openStationDrawer(st) {
     // Reset ML result view
     document.getElementById('ml-result-grid').style.display = 'none';
 
-    // Fetch past history
+    // Fetch both history and forecast in parallel
     try {
-        const res = await fetch(`/api/station/${encodeURIComponent(st.station)}/history`);
-        const historyData = await res.json();
+        const [histRes, forecastRes] = await Promise.all([
+            fetch(`/api/station/${encodeURIComponent(st.station)}/history`),
+            fetch(`/api/station/${encodeURIComponent(st.station)}/forecast-10-months`)
+        ]);
+
+        const historyData = await histRes.json();
         currentStationHistory = historyData.history;
-        renderHydrograph(currentStationHistory);
-    } catch (e) {
-        console.error("Failed to load station history:", e);
-    }
-}
 
-function updateChartToggleButtons() {
-    const btnPast = document.getElementById('btn-chart-past');
-    const btnFuture = document.getElementById('btn-chart-future');
-    if (btnPast && btnFuture) {
-        btnPast.className = currentChartMode === 'past' ? 'btn btn-sm btn-primary' : 'btn btn-sm btn-secondary';
-        btnFuture.className = currentChartMode === 'future' ? 'btn btn-sm btn-primary' : 'btn btn-sm btn-secondary';
-    }
-}
-
-async function switchChartMode(mode) {
-    currentChartMode = mode;
-    updateChartToggleButtons();
-
-    if (mode === 'past') {
-        document.getElementById('chart-sub-label').textContent = "Recorded Water Table Depth (Jan - May 2026)";
-        renderHydrograph(currentStationHistory);
-    } else {
-        document.getElementById('chart-sub-label').textContent = "AI 10-Month Forward Projected Trajectory (June 2026 - March 2027)";
-        if (!currentStationForecast) {
-            try {
-                const res = await fetch(`/api/station/${encodeURIComponent(currentSelectedStation.station)}/forecast-10-months`);
-                currentStationForecast = await res.json();
-            } catch (e) {
-                console.error("Failed to load 10-month forecast:", e);
-                return;
-            }
+        try {
+            currentStationForecast = await forecastRes.json();
+        } catch (e) {
+            currentStationForecast = null;
         }
-        renderForecastChart(currentStationForecast.projections);
+
+        // Update observed range from history
+        if (currentStationHistory.length > 0) {
+            const depths = currentStationHistory.map(h => h.depth);
+            const minD = Math.min(...depths);
+            const maxD = Math.max(...depths);
+            document.getElementById('drawer-range').textContent = `${minD.toFixed(1)} to ${maxD.toFixed(1)} m`;
+        }
+
+        renderCombinedChart();
+    } catch (e) {
+        console.error("Failed to load station data:", e);
     }
 }
 
@@ -333,101 +318,186 @@ function closeDrawer() {
     document.getElementById('station-drawer').style.display = 'none';
 }
 
-function renderHydrograph(history) {
-    const ctx = document.getElementById('stationChart').getContext('2d');
-    const labels = history.map(h => h.time.split(' ')[0]);
-    const depths = history.map(h => h.depth);
+// Chart.js plugin: draws a vertical dashed line at the boundary between recorded & forecast data
+const boundaryLinePlugin = {
+    id: 'boundaryLine',
+    afterDraw(chart) {
+        const meta = chart.getDatasetMeta(0);
+        if (!meta || !meta.data) return;
 
-    const minD = Math.min(...depths);
-    const maxD = Math.max(...depths);
-    document.getElementById('drawer-range').textContent = `${minD.toFixed(1)} to ${maxD.toFixed(1)} m`;
+        // Find the boundary index stored on the chart instance
+        const boundaryIdx = chart._boundaryIndex;
+        if (boundaryIdx == null || boundaryIdx < 0) return;
+
+        const point = meta.data[boundaryIdx];
+        if (!point) return;
+
+        const ctx = chart.ctx;
+        const yAxis = chart.scales.y;
+        const x = point.x;
+
+        ctx.save();
+        ctx.beginPath();
+        ctx.setLineDash([4, 4]);
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.35)';
+        ctx.lineWidth = 1;
+        ctx.moveTo(x, yAxis.top);
+        ctx.lineTo(x, yAxis.bottom);
+        ctx.stroke();
+
+        // Label
+        ctx.setLineDash([]);
+        ctx.font = '9px Plus Jakarta Sans, sans-serif';
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+        ctx.textAlign = 'center';
+        ctx.fillText('▸ Forecast Start', x, yAxis.top - 4);
+
+        ctx.restore();
+    }
+};
+
+function renderCombinedChart() {
+    const ctx = document.getElementById('stationChart').getContext('2d');
 
     if (stationChartInstance) {
         stationChartInstance.destroy();
     }
 
-    stationChartInstance = new Chart(ctx, {
-        type: 'line',
-        data: {
-            labels: labels,
-            datasets: [{
-                label: 'Recorded Depth (mbgl)',
-                data: depths,
-                borderColor: '#06b6d4',
-                backgroundColor: 'rgba(6, 182, 212, 0.12)',
-                borderWidth: 2,
-                pointRadius: depths.length > 80 ? 0 : 2,
-                fill: true,
-                tension: 0.2
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            scales: {
-                y: {
-                    reverse: true,
-                    title: { display: true, text: 'Depth (mbgl - Deeper is Lower)', color: '#94a3b8', font: { size: 10 } },
-                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
-                    ticks: { color: '#94a3b8' }
-                },
-                x: {
-                    grid: { display: false },
-                    ticks: { color: '#94a3b8', maxTicksLimit: 8 }
-                }
-            },
-            plugins: {
-                legend: { display: false },
-                tooltip: {
-                    mode: 'index',
-                    intersect: false,
-                    callbacks: {
-                        label: (ctx) => `Recorded Depth: ${ctx.parsed.y} meters below surface`
-                    }
-                }
-            }
+    // --- Aggregate raw 6-hourly history into WEEKLY averages ---
+    // Group readings by ISO week to match the forecast's weekly granularity
+    const weeklyMap = new Map(); // key: 'YYYY-MM-DD' (Monday of week) -> { sum, count }
+    currentStationHistory.forEach(h => {
+        const dt = new Date(h.time);
+        // Find the Monday of this reading's week
+        const day = dt.getDay(); // 0=Sun, 1=Mon...
+        const diff = dt.getDate() - day + (day === 0 ? -6 : 1); // Adjust to Monday
+        const monday = new Date(dt);
+        monday.setDate(diff);
+        const weekKey = monday.toISOString().split('T')[0];
+
+        if (!weeklyMap.has(weekKey)) {
+            weeklyMap.set(weekKey, { sum: 0, count: 0 });
+        }
+        const bucket = weeklyMap.get(weekKey);
+        bucket.sum += h.depth;
+        bucket.count += 1;
+    });
+
+    // Convert to sorted arrays
+    const histWeeks = Array.from(weeklyMap.entries())
+        .sort((a, b) => a[0].localeCompare(b[0]))
+        .map(([date, bucket]) => ({
+            date: date,
+            depth: Math.round((bucket.sum / bucket.count) * 100) / 100
+        }));
+
+    const historyLabels = histWeeks.map(w => w.date);
+    const historyDepths = histWeeks.map(w => w.depth);
+
+    // --- Forecast data (already weekly) ---
+    let forecastLabels = [];
+    let forecastDepths = [];
+    let forecastProjections = [];
+    if (currentStationForecast && currentStationForecast.projections) {
+        forecastLabels = currentStationForecast.projections.map(p => p.date);
+        forecastDepths = currentStationForecast.projections.map(p => p.predicted_depth);
+        forecastProjections = currentStationForecast.projections;
+    }
+
+    // --- Merge timeline (history weeks + forecast weeks, no duplicates) ---
+    const allLabels = [...historyLabels];
+    forecastLabels.forEach(label => {
+        if (!allLabels.includes(label)) {
+            allLabels.push(label);
         }
     });
-}
 
-function renderForecastChart(projections) {
-    const ctx = document.getElementById('stationChart').getContext('2d');
-    const labels = projections.map(p => p.date);
-    const depths = projections.map(p => p.predicted_depth);
+    const totalLen = allLabels.length;
+    const histLen = historyLabels.length;
 
-    if (stationChartInstance) {
-        stationChartInstance.destroy();
+    // Build recorded dataset: values only for history portion
+    const recordedData = new Array(totalLen).fill(NaN);
+    historyLabels.forEach((label, i) => {
+        const idx = allLabels.indexOf(label);
+        if (idx >= 0) recordedData[idx] = historyDepths[i];
+    });
+
+    // Build forecast dataset: values only for forecast portion
+    const forecastData = new Array(totalLen).fill(NaN);
+    forecastLabels.forEach((label, i) => {
+        const idx = allLabels.indexOf(label);
+        if (idx >= 0) forecastData[idx] = forecastDepths[i];
+    });
+
+    // Bridge: overlap the last recorded point onto the forecast dataset for seamless connection
+    const boundaryIndex = histLen - 1;
+    if (boundaryIndex >= 0 && historyDepths.length > 0) {
+        forecastData[boundaryIndex] = historyDepths[historyDepths.length - 1];
     }
 
     stationChartInstance = new Chart(ctx, {
         type: 'line',
         data: {
-            labels: labels,
-            datasets: [{
-                label: '10-Month AI Projected Depth (mbgl)',
-                data: depths,
-                borderColor: '#a855f7',
-                backgroundColor: 'rgba(168, 85, 247, 0.15)',
-                borderWidth: 2.5,
-                pointRadius: 3,
-                pointHoverRadius: 6,
-                fill: true,
-                tension: 0.3
-            }]
+            labels: allLabels,
+            datasets: [
+                {
+                    label: 'Recorded Depth (mbgl)',
+                    data: recordedData,
+                    borderColor: '#06b6d4',
+                    backgroundColor: 'rgba(6, 182, 212, 0.08)',
+                    borderWidth: 2,
+                    pointRadius: 2,
+                    pointHoverRadius: 5,
+                    pointBackgroundColor: '#06b6d4',
+                    fill: true,
+                    tension: 0.3,
+                    spanGaps: false
+                },
+                {
+                    label: 'AI Forecast Depth (mbgl)',
+                    data: forecastData,
+                    borderColor: '#a855f7',
+                    backgroundColor: 'rgba(168, 85, 247, 0.10)',
+                    borderWidth: 2.5,
+                    borderDash: [6, 3],
+                    pointRadius: 3,
+                    pointHoverRadius: 6,
+                    pointBackgroundColor: '#a855f7',
+                    pointBorderColor: '#1e1b4b',
+                    pointBorderWidth: 1.5,
+                    fill: true,
+                    tension: 0.3,
+                    spanGaps: false
+                }
+            ]
         },
         options: {
             responsive: true,
             maintainAspectRatio: false,
+            interaction: {
+                mode: 'index',
+                intersect: false
+            },
             scales: {
                 y: {
                     reverse: true,
-                    title: { display: true, text: 'Projected Depth (mbgl - Deeper is Lower)', color: '#a855f7', font: { size: 10 } },
+                    title: {
+                        display: true,
+                        text: 'Depth (mbgl) — Deeper is Lower',
+                        color: '#94a3b8',
+                        font: { size: 10 }
+                    },
                     grid: { color: 'rgba(255, 255, 255, 0.05)' },
                     ticks: { color: '#94a3b8' }
                 },
                 x: {
                     grid: { display: false },
-                    ticks: { color: '#94a3b8', maxTicksLimit: 9 }
+                    ticks: {
+                        color: '#94a3b8',
+                        maxTicksLimit: 12,
+                        maxRotation: 45,
+                        minRotation: 0
+                    }
                 }
             },
             plugins: {
@@ -435,16 +505,29 @@ function renderForecastChart(projections) {
                 tooltip: {
                     mode: 'index',
                     intersect: false,
+                    filter: (item) => !isNaN(item.parsed.y),
                     callbacks: {
-                        label: (ctx) => {
-                            const p = projections[ctx.dataIndex];
-                            return `Depth: ${p.predicted_depth} m | ${p.alert_status} [${p.season_phase}]`;
+                        label: (tooltipItem) => {
+                            if (tooltipItem.datasetIndex === 0) {
+                                return `Recorded: ${tooltipItem.parsed.y.toFixed(2)} m below surface`;
+                            } else {
+                                const dateLabel = allLabels[tooltipItem.dataIndex];
+                                const proj = forecastProjections.find(p => p.date === dateLabel);
+                                if (proj) {
+                                    return `AI Forecast: ${proj.predicted_depth} m | ${proj.alert_status} [${proj.season_phase}]`;
+                                }
+                                return `AI Forecast: ${tooltipItem.parsed.y.toFixed(2)} m below surface`;
+                            }
                         }
                     }
                 }
             }
-        }
+        },
+        plugins: [boundaryLinePlugin]
     });
+
+    // Store boundary index on the chart instance for the plugin
+    stationChartInstance._boundaryIndex = boundaryIndex;
 }
 
 // --- STEP 7: ML PREDICTION TRIGGER ---

@@ -175,17 +175,19 @@
             <!-- Chart Container -->
             <div class="chart-container-box">
                 <div class="chart-header">
-                    <div style="display: flex; gap: 8px;">
-                        <button class="btn btn-sm btn-secondary active-mode" id="btn-chart-past" onclick="switchChartMode('past')">
-                            <i class="fa-solid fa-chart-line"></i> Recorded (Jan-May 2026)
-                        </button>
-                        <button class="btn btn-sm btn-primary" id="btn-chart-future" onclick="switchChartMode('future')">
-                            <i class="fa-solid fa-wand-magic-sparkles"></i> 🔮 10-Month AI Forecast (June 2026 - March 2027)
-                        </button>
+                    <div style="display: flex; gap: 12px; align-items: center;">
+                        <div style="display: flex; align-items: center; gap: 6px;">
+                            <span style="width: 18px; height: 3px; background: #06b6d4; display: inline-block; border-radius: 2px;"></span>
+                            <span style="font-size: 11px; color: #06b6d4; font-weight: 600;">Recorded (Jan–May 2026)</span>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 6px;">
+                            <span style="width: 18px; height: 3px; background: #a855f7; display: inline-block; border-radius: 2px; border-top: 2px dashed #a855f7; background: none;"></span>
+                            <span style="font-size: 11px; color: #a855f7; font-weight: 600;">AI Forecast (Jun 2026–Mar 2027)</span>
+                        </div>
                     </div>
-                    <span class="chart-sub" id="chart-sub-label">Water Table Depth Below Ground Level</span>
+                    <span class="chart-sub" id="chart-sub-label">Combined Hydrograph — Water Table Depth (mbgl)</span>
                 </div>
-                <div style="height: 220px; width: 100%;">
+                <div style="height: 240px; width: 100%;">
                     <canvas id="stationChart"></canvas>
                 </div>
             </div>
@@ -217,6 +219,6 @@
     </div>
 
     <!-- Custom App Logic -->
-    <script src="/static/app.js?v=4"></script>
+    <script src="/static/app.js?v=6"></script>
 </body>
 </html>
